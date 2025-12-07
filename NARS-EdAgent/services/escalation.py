@@ -1,4 +1,4 @@
-from services.env import (
+from .env import (
     TG_BOT_TOKEN, TG_HUMAN_CHAT_ID,
     EMAIL_FOR_ESCALATION, ESCALATION_ENABLED
 )

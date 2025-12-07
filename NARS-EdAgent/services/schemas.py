@@ -38,3 +38,32 @@ class DashboardStats(BaseModel):
     escalations: int
     recent_responses: int
     top_companies: List[str]
+
+class AgreementIn(BaseModel):
+    company: str
+    project_description: str
+    contact_person: Optional[str] = None
+    contact_email: Optional[str] = None
+
+class AgreementOut(BaseModel):
+    id: int
+    company: str
+    project_description: str
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ProjectTaskOut(BaseModel):
+    id: int
+    company: str
+    title: str
+    description: str
+    expected_duration_weeks: int
+    roles: List[dict]
+    competencies: List[str]
+
+    class Config:
+        from_attributes = True

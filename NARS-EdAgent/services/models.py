@@ -32,3 +32,41 @@ class FollowupLog(Base):
     days_after = Column(Integer, default=7)
     sent_at = Column(DateTime, default=datetime.utcnow)
     status = Column(String, default="sent")
+
+class PartnerAgreement(Base):
+    __tablename__ = "partner_agreements"
+    id = Column(Integer, primary_key=True)
+    company = Column(String, nullable=False, unique=True)
+    project_description = Column(Text, nullable=False)
+    contact_person = Column(String)
+    contact_email = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    status = Column(String, default="confirmed")
+
+
+class ProjectTask(Base):
+    __tablename__ = "project_tasks"
+    id = Column(Integer, primary_key=True)
+    company = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    expected_duration_weeks = Column(Integer, default=8)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    agreement_id = Column(Integer, nullable=False)
+
+
+class ProjectRole(Base):
+    __tablename__ = "project_roles"
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, nullable=False)
+    role_name = Column(String, nullable=False)
+    required_skills = Column(Text)
+    workload_hours = Column(Integer, default=80)
+
+
+class ProjectCompetency(Base):
+    __tablename__ = "project_competencies"
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, nullable=False)
+    competency_code = Column(String, nullable=False)
+    competency_name = Column(String, nullable=False)

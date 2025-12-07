@@ -3,12 +3,14 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from .models import ReplyLog, Base, OutreachLog, FollowupLog
-from .schemas import ReplyIn, ReplyOut, DashboardStats
+from .models import ReplyLog, Base, OutreachLog, FollowupLog, PartnerAgreement, ProjectTask, ProjectRole, \
+    ProjectCompetency
+from .schemas import ReplyIn, ReplyOut, DashboardStats, AgreementIn, AgreementOut
 from .db import get_db, engine
 from .classifier import classify_intent
 from .escalation import notify_human
 from .email_service import check_email_status
+from .project_generator import generate_project_task
 
 Base.metadata.create_all(bind=engine)
 
@@ -403,13 +405,91 @@ async def health_check():
     }
 
 
-# Вспомогательные функции
+@app.post("/agreements", tags=["Фаза 5: Соглашения"])
+def create_agreement(agreement: AgreementIn, db: Session = Depends(get_db)):
+    existing = db.query(PartnerAgreement).filter(PartnerAgreement.company == agreement.company).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Соглашение для этой компании уже существует")
+
+    db_agreement = PartnerAgreement(
+        company=agreement.company,
+        project_description=agreement.project_description,
+        contact_person=agreement.contact_person,
+        contact_email=agreement.contact_email
+    )
+    db.add(db_agreement)
+    db.commit()
+    db.refresh(db_agreement)
+    return AgreementOut.from_orm(db_agreement)
+
+
+@app.post("/projects/generate/{agreement_id}", tags=["Фаза 5: Проекты"])
+def generate_project_from_agreement(agreement_id: int, db: Session = Depends(get_db)):
+    agreement = db.query(PartnerAgreement).filter(PartnerAgreement.id == agreement_id).first()
+    if not agreement:
+        raise HTTPException(status_code=404, detail="Соглашение не найдено")
+
+    task_data = generate_project_task(agreement.company, agreement.project_description)
+
+    project_task = ProjectTask(
+        company=agreement.company,
+        title=task_data["title"],
+        description=task_data["description"],
+        expected_duration_weeks=task_data["expected_duration_weeks"],
+        agreement_id=agreement.id
+    )
+    db.add(project_task)
+    db.commit()
+    db.refresh(project_task)
+
+    for role in task_data["roles"]:
+        db_role = ProjectRole(
+            project_id=project_task.id,
+            role_name=role["role_name"],
+            required_skills=", ".join(role["required_skills"]),
+            workload_hours=80
+        )
+        db.add(db_role)
+
+    for comp in task_data["competencies"]:
+        db_comp = ProjectCompetency(
+            project_id=project_task.id,
+            competency_code=comp,
+            competency_name=comp
+        )
+        db.add(db_comp)
+
+    db.commit()
+
+    return {
+        "project_id": project_task.id,
+        "title": project_task.title,
+        "roles": task_data["roles"],
+        "competencies": task_data["competencies"]
+    }
+
+
+@app.get("/projects/catalog", tags=["Фаза 5: Проекты"])
+def get_project_catalog(db: Session = Depends(get_db)):
+    projects = db.query(ProjectTask).all()
+    catalog = []
+    for p in projects:
+        roles = db.query(ProjectRole).filter(ProjectRole.project_id == p.id).all()
+        comps = db.query(ProjectCompetency).filter(ProjectCompetency.project_id == p.id).all()
+        catalog.append({
+            "id": p.id,
+            "company": p.company,
+            "title": p.title,
+            "description": p.description,
+            "duration_weeks": p.expected_duration_weeks,
+            "roles": [{"role": r.role_name, "skills": r.required_skills.split(", ")} for r in roles],
+            "competencies": [c.competency_code for c in comps]
+        })
+    return catalog
+
 async def schedule_followup(company: str, email: str, days_after: int):
-    """
-    Фоновая задача для планирования фоллоу-апа
-    """
     import asyncio
-    await asyncio.sleep(days_after * 24 * 3600)  # Ждем указанное количество дней
+    await asyncio.sleep(days_after * 24 * 3600)
 
     # Отправляем фоллоу-ап
     try:
