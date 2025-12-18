@@ -29,22 +29,7 @@ import {
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { outreachService } from '../../services/api';
-
-// Данные из файла top_20_companies_for_review.xlsx
-const POTENTIAL_LEADS = [
-  { name: 'RedLab', email: 'hr@redlab.dev', stack: 'SQL, TypeScript' },
-  { name: 'SkillStaff', email: 'hello@skillstaff.ru', stack: 'Fullstack' },
-  { name: 'Кибертех', email: 'jobs@cyberprod.ru', stack: 'Python, Git' },
-  { name: 'Optimax Dev', email: 'career@optimax.dev', stack: 'React, PHP' },
-  { name: 'Правительство Москвы', email: 'grad@mos.ru', stack: 'GovTech' },
-  {
-    name: 'Positive Technologies',
-    email: 'edu@ptsecurity.com',
-    stack: 'Python, Go, SQL',
-  },
-  { name: 'Haulmont', email: 'hr@haulmont.com', stack: 'Java, Jmix' },
-  { name: 'Т1', email: 'job@t1.ru', stack: 'Big Data, Java' },
-];
+import { POTENTIAL_LEADS } from '../../shared/const';
 
 export default function Outreach() {
   const [tabValue, setTabValue] = useState(0);

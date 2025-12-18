@@ -29,8 +29,7 @@ import {
   YAxis,
   CartesianGrid,
 } from 'recharts';
-
-const COLORS = ['#00C49F', '#FF8042', '#FFBB28', '#0088FE']; // Interest, Decline, FAQ, Other
+import { COLORS } from '../../shared/const';
 
 export default function Dashboard() {
   // 1. Запрос общей статистики

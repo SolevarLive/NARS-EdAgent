@@ -28,34 +28,7 @@ import {
 } from '@mui/icons-material';
 import { classifyService } from '../../services/api';
 import { useMutation } from '@tanstack/react-query';
-
-// Шаблоны для быстрого теста
-const SCENARIOS = [
-  {
-    label: 'Интерес (Позитив)',
-    text: 'Здравствуйте! Нам интересно ваше предложение. Давайте созвонимся во вторник.',
-  },
-  {
-    label: 'Отказ (Нет времени)',
-    text: 'Добрый день. Сейчас у нас нет ресурсов на менторство студентов. Спасибо.',
-  },
-  {
-    label: 'Своя стажировка',
-    text: 'У нас уже есть своя программа стажировок, мы набираем людей туда.',
-  },
-  {
-    label: 'Запрос FAQ',
-    text: 'А кто владеет правами на код? И нужно ли платить студентам?',
-  },
-];
-
-// Этапы "мышления" (для визуализации NARS/RFT)
-const STEPS = [
-  'Получение сигнала',
-  'NLP Анализ (RFT)',
-  'Поиск паттернов',
-  'Формирование вывода',
-];
+import { SCENARIOS, STEPS } from '../../shared/const';
 
 export default function Simulator() {
   const [inputText, setInputText] = useState('');

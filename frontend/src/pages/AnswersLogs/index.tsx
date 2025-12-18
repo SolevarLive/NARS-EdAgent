@@ -26,24 +26,9 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { classifyService } from '../../services/api';
 import { ReplyOut } from '../../shared/types';
+import { getIntentColor } from '../../shared/const';
 
-// Вспомогательная функция для цвета интента (та же, что в симуляторе)
-const getIntentColor = (intent: string) => {
-  switch (intent) {
-    case 'INTEREST':
-      return 'success';
-    case 'DECLINE':
-      return 'error';
-    case 'FAQ_REQUEST':
-      return 'warning';
-    case 'OWN_INTERNSHIP':
-      return 'info';
-    default:
-      return 'default';
-  }
-};
-
-export default function Logs() {
+export default function AnswersLogs() {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
@@ -56,8 +41,6 @@ export default function Logs() {
   } = useQuery({
     queryKey: ['system-logs', page, rowsPerPage],
     queryFn: () => classifyService.getLogs(page * rowsPerPage, rowsPerPage),
-    // Рефетч при смене страницы не нужен, если мы не используем cursor-based,
-    // но для простоты оставим зависимость от ключа
   });
 
   const handleChangePage = (_event: unknown, newPage: number) => {
@@ -140,6 +123,7 @@ export default function Logs() {
                       <TableCell>
                         <Chip
                           label={log.predicted_intent}
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
                           color={getIntentColor(log.predicted_intent) as any}
                           size='small'
                           variant='outlined'
