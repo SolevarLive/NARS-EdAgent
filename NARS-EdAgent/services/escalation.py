@@ -1,56 +1,81 @@
-from .env import (
-    TG_BOT_TOKEN, TG_HUMAN_CHAT_ID,
-    EMAIL_FOR_ESCALATION, ESCALATION_ENABLED
-)
+import os
+import requests
+import logging
+from .email_service import SMTPClient
 
+logger = logging.getLogger(__name__)
 
 def notify_human(company: str, reply_text: str, intent: str = "INTEREST"):
     """
-    Многоканальное уведомление при эскалации
+    Многоканальное уведомление при эскалации (только при INTEREST).
+    Все параметры берутся из .env — никаких хардкодов.
     """
-    if not ESCALATION_ENABLED:
-        print(f"⚠️ Эскалация отключена. Для компании {company}: {reply_text[:50]}...")
+    escalation_enabled = os.getenv("ESCALATION_ENABLED", "true").lower() == "true"
+    if not escalation_enabled:
+        logger.warning(f"⚠️ Эскалация отключена в .env. Пропускаем {company}.")
         return False
 
-    message = f"""
-🚨 КРИТИЧЕСКАЯ ТОЧКА ЭСКАЛАЦИИ №4
+    emoji = {
+        "INTEREST": "✅",
+        "FAQ_REQUEST": "❓",
+        "OWN_INTERNSHIP": "🛠",
+        "DECLINE": "❌"
+    }.get(intent, "📄")
 
-Компания: {company}
-Тип ответа: {intent}
-Текст ответа: {reply_text}
+    message = (
+        f"{emoji} *Ответ от компании*\n\n"
+        f"**{company}**\n"
+        f"_({intent})_\n\n"
+        f"\"{reply_text[:150]}{'...' if len(reply_text) > 150 else ''}\"\n\n"
+        f"📌 Действие: {'Срочно созвонитесь' if intent == 'INTEREST' else 'Ответьте шаблоном'}"
+    )
 
-Требуется:
-1. Личный контакт с представителем компании
-2. Организация встречи (онлайн/офлайн)
-3. Обсуждение деталей проекта
-4. Заключение соглашения
-"""
+    tg_token = os.getenv("TG_BOT_TOKEN")
+    tg_chat_id = os.getenv("TG_HUMAN_CHAT_ID")
 
-    if TG_BOT_TOKEN and TG_HUMAN_CHAT_ID:
+    if tg_token and tg_chat_id:
         try:
-            import telebot
-            bot = telebot.TeleBot(TG_BOT_TOKEN)
-            bot.send_message(
-                TG_HUMAN_CHAT_ID,
-                message[:4000],
-                parse_mode="HTML"
-            )
-            print(f"✅ Telegram уведомление отправлено для {company}")
-        except Exception as e:
-            print(f"❌ Ошибка Telegram: {e}")
 
-    if EMAIL_FOR_ESCALATION:
+            url = f"https://api.telegram.org/bot{tg_token}/sendMessage"
+            resp = requests.post(url, json={
+                "chat_id": tg_chat_id,
+                "text": message,
+                "parse_mode": "Markdown",
+                "disable_web_page_preview": True
+            })
+            if resp.status_code == 200:
+                logger.info(f"✅ Telegram: уведомление отправлено для {company}")
+            else:
+                logger.error(f"❌ TG API error ({resp.status_code}): {resp.text}")
+        except Exception as e:
+            logger.error(f"❌ Ошибка Telegram: {e}")
+
+    email_to = os.getenv("EMAIL_FOR_ESCALATION")
+    if email_to:
         try:
-            import smtplib
-            from email.mime.text import MIMEText
+            smtp = SMTPClient()
+            subject = f"[ПроКомпетенции] Ответ от {company}: {intent}"
+            body = f"""
+Добрый день!
 
-            msg = MIMEText(message, 'plain', 'utf-8')
-            msg['Subject'] = f'🚨 Эскалация №4: {company} заинтересовалась'
-            msg['From'] = 'agent@prokompetencii.ru'
-            msg['To'] = EMAIL_FOR_ESCALATION
+Компания **{company}** ответила:
 
-            print(f"✅ Email уведомление отправлено для {company}")
+> {reply_text}
+
+**Рекомендуемое действие**:
+- ✅ **INTEREST** → созвонитесь в течение 24 ч, предложите слоты (Zoom/офис).
+- ❓ **FAQ_REQUEST** → пришлите презентацию и FAQ: https://prokompetentsii.ru/faq.pdf  
+- 🛠 **OWN_INTERNSHIP** → предложите интеграцию в их трек.
+- ❌ **DECLINE** → внести в CRM для анализа.
+
+С уважением,  
+AI-агент ПроКомпетенций (Фаза 4)
+            """.strip()
+
+            success = smtp.send(email_to, subject, body, html=True)
+            if success:
+                logger.info(f"✅ Email: уведомление отправлено для {company}")
         except Exception as e:
-            print(f"❌ Ошибка Email: {e}")
+            logger.error(f"❌ Ошибка Email: {e}")
 
     return True
