@@ -1,7 +1,11 @@
+import uvicorn
+import asyncio
+import logging
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import List, Optional
+from contextlib import asynccontextmanager  # ← Добавлен импорт
 
 from .models import ReplyLog, Base, OutreachLog, FollowupLog, PartnerAgreement, ProjectTask, ProjectRole, \
     ProjectCompetency
@@ -9,15 +13,71 @@ from .schemas import ReplyIn, ReplyOut, DashboardStats, AgreementIn, AgreementOu
 from .db import get_db, engine
 from .classifier import classify_intent
 from .escalation import notify_human
-from .email_service import check_email_status
+from .email_service import get_new_replies, send_email, send_followup_email, check_email_status
 from .project_generator import generate_project_task
 
 Base.metadata.create_all(bind=engine)
 
+async def process_incoming_emails():
+    while True:
+        try:
+            new_emails = get_new_replies()
+
+            for email_data in new_emails:
+                company = email_data["company"]
+                reply_text = email_data["reply_text"]
+
+                predicted_intent, confidence = classify_intent(reply_text)
+                human_involved = (predicted_intent == "INTEREST")
+
+
+                db = next(get_db())
+                try:
+                    log = ReplyLog(
+                        company=company,
+                        reply_text=reply_text[:1000],
+                        predicted_intent=predicted_intent,
+                        confidence=str(confidence),
+                        human_involved=human_involved,
+                        raw_sender=email_data.get("raw_sender", ""),
+                        raw_subject=email_data.get("raw_subject", "")
+                    )
+                    db.add(log)
+                    db.commit()
+                    db.refresh(log)
+
+                    if human_involved:
+                        notify_human(company, reply_text, predicted_intent)
+
+                except Exception as e:
+                    db.rollback()
+                finally:
+                    db.close()
+
+            await asyncio.sleep(180)
+
+        except Exception as e:
+            await asyncio.sleep(60)
+
+
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(process_incoming_emails())
+    yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
 app = FastAPI(
     title="Phase 4 Backend — Outreach & Escalation",
     description="API для обработки ответов компаний, эскалации и управления коммуникациями",
-    version="1.0.0"
+    version="2.0.0",
+    lifespan=lifespan
 )
 
 
@@ -99,17 +159,12 @@ async def send_outreach(
     - Запланирует фоллоу-ап
     """
     try:
-        # Симуляция отправки email (в продакшене - интеграция с SendGrid/Mailgun)
-        print(f"📧 Отправка письма компании {company} на {email}")
+        result = send_email(email, company)
 
-        # Здесь реальная отправка через email сервис
-        # send_email(to_email=email, company_name=company)
-
-        # Логируем отправку
         outreach_log = OutreachLog(
             company=company,
             email=email,
-            status="sent",
+            status=result.get("status", "error"),
             email_sent_at=datetime.utcnow(),
             followup_scheduled=datetime.utcnow() + timedelta(days=7)
         )
@@ -247,10 +302,8 @@ async def send_followup(
     FR-4.5: Отправка автоматических фоллоу-апов
     """
     try:
-        print(f"⏰ Отправка фоллоу-апа компании {company} через {days_after} дней")
-
-        # Отправка фоллоу-апа через email сервис
-        # send_followup_email(to_email=email, company_name=company, days_after=days_after)
+        # Отправка фоллоу-апа
+        result = send_followup_email(email, company, days_after)
 
         # Логируем отправку фоллоу-апа
         followup_log = FollowupLog(
